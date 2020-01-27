@@ -491,14 +491,17 @@ func cmdAdd(args *skel.CmdArgs) (err error) {
 		}
 		res.IPs = append(res.IPs, ipConfig)
 		res.Routes = append(res.Routes, routes...)
+	}
 
-		if conf.IpamMode == option.IPAMENI {
-			err = eniAdd(ipConfig, ipam.IPV4, conf)
-			if err != nil {
-				err = fmt.Errorf("unable to setup ENI datapath: %s", err)
-				return
-			}
+	switch conf.IpamMode {
+	case option.IPAMENI:
+		err = eniAdd(ipConfig, ipam.IPV4, conf)
+		if err != nil {
+			err = fmt.Errorf("unable to setup ENI datapath: %s", err)
+			return
 		}
+
+	case option.IPAMAzure:
 	}
 
 	var macAddrStr string

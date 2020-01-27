@@ -37,8 +37,8 @@ type Client struct {
 }
 
 type metricsAPI interface {
-	ObserveEC2APICall(call, status string, duration float64)
-	ObserveEC2RateLimit(operation string, duration time.Duration)
+	ObserveAPICall(call, status string, duration float64)
+	ObserveRateLimit(operation string, duration time.Duration)
 }
 
 // NewClient returns a new EC2 client
@@ -68,7 +68,7 @@ func deriveStatus(req *aws.Request, err error) string {
 func (c *Client) rateLimit(ctx context.Context, operation string) {
 	r := c.limiter.Reserve()
 	if delay := r.Delay(); delay != time.Duration(0) && delay != rate.InfDuration {
-		c.metricsAPI.ObserveEC2RateLimit(operation, delay)
+		c.metricsAPI.ObserveRateLimit(operation, delay)
 		c.limiter.Wait(ctx)
 	}
 }
@@ -90,7 +90,7 @@ func (c *Client) describeNetworkInterfaces(ctx context.Context) ([]ec2.NetworkIn
 		sinceStart := spanstat.Start()
 		listReq := c.ec2Client.DescribeNetworkInterfacesRequest(req)
 		response, err := listReq.Send(ctx)
-		c.metricsAPI.ObserveEC2APICall("DescribeNetworkInterfaces", deriveStatus(listReq.Request, err), sinceStart.Seconds())
+		c.metricsAPI.ObserveAPICall("DescribeNetworkInterfaces", deriveStatus(listReq.Request, err), sinceStart.Seconds())
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +212,7 @@ func (c *Client) describeVpcs(ctx context.Context) ([]ec2.Vpc, error) {
 	sinceStart := spanstat.Start()
 	listReq := c.ec2Client.DescribeVpcsRequest(req)
 	response, err := listReq.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("DescribeVpcs", deriveStatus(listReq.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("DescribeVpcs", deriveStatus(listReq.Request, err), sinceStart.Seconds())
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (c *Client) describeSubnets(ctx context.Context) ([]ec2.Subnet, error) {
 	sinceStart := spanstat.Start()
 	listReq := c.ec2Client.DescribeSubnetsRequest(&ec2.DescribeSubnetsInput{})
 	result, err := listReq.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("DescribeSubnets", deriveStatus(listReq.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("DescribeSubnets", deriveStatus(listReq.Request, err), sinceStart.Seconds())
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +312,7 @@ func (c *Client) CreateNetworkInterface(ctx context.Context, toAllocate int64, s
 	sinceStart := spanstat.Start()
 	create := c.ec2Client.CreateNetworkInterfaceRequest(createReq)
 	resp, err := create.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("CreateNetworkInterfaceRequest", deriveStatus(create.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("CreateNetworkInterfaceRequest", deriveStatus(create.Request, err), sinceStart.Seconds())
 	if err != nil {
 		return "", nil, err
 	}
@@ -340,7 +340,7 @@ func (c *Client) DeleteNetworkInterface(ctx context.Context, eniID string) error
 	sinceStart := spanstat.Start()
 	req := c.ec2Client.DeleteNetworkInterfaceRequest(delReq)
 	_, err := req.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("DeleteNetworkInterface", deriveStatus(req.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("DeleteNetworkInterface", deriveStatus(req.Request, err), sinceStart.Seconds())
 	return err
 }
 
@@ -356,7 +356,7 @@ func (c *Client) AttachNetworkInterface(ctx context.Context, index int64, instan
 	sinceStart := spanstat.Start()
 	attach := c.ec2Client.AttachNetworkInterfaceRequest(attachReq)
 	attachResp, err := attach.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("AttachNetworkInterface", deriveStatus(attach.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("AttachNetworkInterface", deriveStatus(attach.Request, err), sinceStart.Seconds())
 	if err != nil {
 		return "", err
 	}
@@ -380,7 +380,7 @@ func (c *Client) ModifyNetworkInterface(ctx context.Context, eniID, attachmentID
 	sinceStart := spanstat.Start()
 	modify := c.ec2Client.ModifyNetworkInterfaceAttributeRequest(modifyReq)
 	_, err := modify.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("ModifyNetworkInterface", deriveStatus(modify.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("ModifyNetworkInterface", deriveStatus(modify.Request, err), sinceStart.Seconds())
 	return err
 }
 
@@ -396,7 +396,7 @@ func (c *Client) AssignPrivateIpAddresses(ctx context.Context, eniID string, add
 	sinceStart := spanstat.Start()
 	req := c.ec2Client.AssignPrivateIpAddressesRequest(&request)
 	_, err := req.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("AssignPrivateIpAddresses", deriveStatus(req.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("AssignPrivateIpAddresses", deriveStatus(req.Request, err), sinceStart.Seconds())
 	return err
 }
 
@@ -411,7 +411,7 @@ func (c *Client) UnassignPrivateIpAddresses(ctx context.Context, eniID string, a
 	sinceStart := spanstat.Start()
 	req := c.ec2Client.UnassignPrivateIpAddressesRequest(&request)
 	_, err := req.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("UnassignPrivateIpAddresses", deriveStatus(req.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("UnassignPrivateIpAddresses", deriveStatus(req.Request, err), sinceStart.Seconds())
 	return err
 }
 
@@ -425,7 +425,7 @@ func (c *Client) TagENI(ctx context.Context, eniID string, eniTags map[string]st
 	sinceStart := spanstat.Start()
 	req := c.ec2Client.CreateTagsRequest(&request)
 	_, err := req.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("CreateTags", deriveStatus(req.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("CreateTags", deriveStatus(req.Request, err), sinceStart.Seconds())
 	return err
 }
 
@@ -447,7 +447,7 @@ func (c *Client) describeSecurityGroups(ctx context.Context) ([]ec2.SecurityGrou
 	sinceStart := spanstat.Start()
 	req := c.ec2Client.DescribeSecurityGroupsRequest(&ec2.DescribeSecurityGroupsInput{})
 	response, err := req.Send(ctx)
-	c.metricsAPI.ObserveEC2APICall("DescribeSecurityGroups", deriveStatus(req.Request, err), sinceStart.Seconds())
+	c.metricsAPI.ObserveAPICall("DescribeSecurityGroups", deriveStatus(req.Request, err), sinceStart.Seconds())
 	if err != nil {
 		return []ec2.SecurityGroup{}, err
 	}

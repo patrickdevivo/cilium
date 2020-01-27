@@ -715,6 +715,11 @@ type NodeSpec struct {
 	// +optional
 	ENI ENISpec `json:"eni,omitempty"`
 
+	// Azure is the Azure specific configuration
+	//
+	// +optional
+	Azure AzureSpec `json:"azure,omitempty"`
+
 	// IPAM is the address management specification. This section can be
 	// populated by a user or it can be automatically populated by an IPAM
 	// operator
@@ -887,6 +892,11 @@ type NodeStatus struct {
 	// +optional
 	ENI ENIStatus `json:"eni,omitempty"`
 
+	// Azure is the Azure specific status of the node
+	//
+	// +optional
+	Azure AzureStatus `json:"azure,omitempty"`
+
 	// IPAM is the IPAM status of the node
 	//
 	// +optional
@@ -1006,6 +1016,64 @@ type AwsVPC struct {
 
 	// CIDRs is the list of CIDR ranges associated with the VPC
 	CIDRs []string `json:"cidrs,omitempty"`
+}
+
+// AzureSpec is the Azure specific configuration of a node.
+//
+// The Azure configuration can either be provided explicitly by the user or the
+// cilium agent running on the node can be instructed to create the CiliumNode
+// custom resource along with an Azure configuration when the node registers
+// itself to the Kubernetes cluster.
+type AzureSpec struct {
+	// InstanceID is the Azure specific identifier of the node.
+	InstanceID string `json:"instance-id,omitempty"`
+}
+
+// AzureStatus is the status of Azure addressing of the node
+type AzureStatus struct {
+	// Interfaces is the list of interfaces on the node
+	//
+	// +optional
+	Interfaces []AzureInterface `json:"interfaces,omitempty"`
+}
+
+// AzureAddress
+type AzureAddress struct {
+	// IP is the ip address of the address
+	IP string `json:"ip,omitempty"`
+
+	// Subnet is the subnet the address belongs to
+	Subnet string `json:"subnet,omitempty"`
+
+	// State is the provisioning state of the address
+	State string `json:"state,omitempty"`
+}
+
+// AzureInterface represents an Azure Interface
+type AzureInterface struct {
+	// ID is the identifier
+	//
+	// +optional
+	ID string `json:"id,omitempty"`
+
+	// MAC is the mac address
+	//
+	// +optional
+	MAC string `json:"mac,omitempty"`
+
+	// State is the provisioning state
+	//
+	// +optional
+	State string `json:"state,omitempty"`
+
+	// Addresses is the list of all IPs associated with the ENI, including
+	// all secondary addresses
+	//
+	// +optional
+	Addresses []AzureAddress `json:"addresses,omitempty"`
+
+	// SecurityGroup is the security group associated with the interface
+	SecurityGroup string `json:"security-group,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -23,10 +23,10 @@ import (
 	"time"
 
 	ec2mock "github.com/cilium/cilium/pkg/aws/ec2/mock"
-	metricsMock "github.com/cilium/cilium/pkg/aws/eni/metrics/mock"
 	"github.com/cilium/cilium/pkg/aws/types"
 	"github.com/cilium/cilium/pkg/checker"
 	"github.com/cilium/cilium/pkg/ipam"
+	metricsMock "github.com/cilium/cilium/pkg/ipam/metrics/mock"
 	v2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/testutils"
@@ -49,9 +49,9 @@ var (
 	}
 	testSecurityGroups = []*types.SecurityGroup{
 		{
-			ID:               "sg-1",
-			VirtualNetworkID: "vpc-1",
-			Tags:             ipam.Tags{"test-sg-1": "yes"},
+			ID:    "sg-1",
+			VpcID: "vpc-1",
+			Tags:  ipam.Tags{"test-sg-1": "yes"},
 		},
 		{
 			ID:    "sg-2",
@@ -604,7 +604,7 @@ func (e *ENISuite) TestNodeManagerManyNodes(c *check.C) {
 
 	// All subnets must have been used for allocation
 	for _, subnet := range subnets {
-		c.Assert(metricsapi.ENIAllocationAttempts("success", subnet.ID), check.Not(check.Equals), 0)
+		c.Assert(metricsapi.AllocationAttempts("success", subnet.ID), check.Not(check.Equals), 0)
 		c.Assert(metricsapi.IPAllocations(subnet.ID), check.Not(check.Equals), 0)
 	}
 
@@ -641,7 +641,7 @@ func (e *ENISuite) TestNodeManagerInstanceNotRunning(c *check.C) {
 	}, 5*time.Second), check.IsNil)
 
 	// Metric should not indicate failure
-	c.Assert(metricsapi.ENIAllocationAttempts("ENI attachment failed", testSubnet.ID), check.Equals, int64(0))
+	c.Assert(metricsapi.AllocationAttempts("ENI attachment failed", testSubnet.ID), check.Equals, int64(0))
 
 	node := mngr.Get("node1")
 	c.Assert(node, check.Not(check.IsNil))

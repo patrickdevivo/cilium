@@ -153,6 +153,12 @@ func init() {
 	flags.Float32(option.K8sClientQPSLimit, defaults.K8sClientQPSLimit, "Queries per second limit for the K8s client")
 	flags.Int(option.K8sClientBurst, defaults.K8sClientBurst, "Burst value allowed for the K8s client")
 
+	flags.String("azure-subscription-id", "", "Subscription ID to access Azure API")
+	option.BindEnvWithLegacyEnvFallback("azure-subscription-id", "AZURE_SUBSCRIPTION_ID")
+
+	flags.String("azure-resource-group", "", "Resource group to use for Azure IPAM")
+	option.BindEnvWithLegacyEnvFallback("azure-resource-group", "AZURE_RESOURCE_GROUP")
+
 	// We need to obtain from Cilium ConfigMap if the CiliumEndpointCRD option
 	// is enabled or disabled. This option is marked as hidden because the
 	// Cilium Endpoint CRD controller is not in this program and by having it
@@ -257,7 +263,11 @@ func runOperator(cmd *cobra.Command) {
 		enableUnmanagedKubeDNSController()
 	}
 
-	enableENI = viper.GetString(option.IPAM) == option.IPAMENI
+	clientQPSLimit := viper.GetFloat64(option.AWSClientQPSLimit)
+	clientBurst := viper.GetInt(option.AWSClientBurst)
+
+	ipamMode := viper.GetString(option.IPAM)
+	enableENI = ipamMode == option.IPAMENI
 	if enableENI {
 		if err := eni.UpdateLimitsFromUserDefinedMappings(awsInstanceLimitMapping); err != nil {
 			log.WithError(err).Fatal("Parse aws-instance-limit-mapping failed")
@@ -267,13 +277,19 @@ func runOperator(cmd *cobra.Command) {
 				log.WithError(err).Error("Unable to update instance type to adapter limits from EC2 API")
 			}
 		}
-		awsClientQPSLimit := viper.GetFloat64(option.AWSClientQPSLimit)
-		awsClientBurst := viper.GetInt(option.AWSClientBurst)
 		if m := viper.GetStringMapString(option.ENITags); len(m) > 0 {
 			eniTags = m
 		}
-		if err := startENIAllocator(awsClientQPSLimit, awsClientBurst, eniTags); err != nil {
+		if err := startENIAllocator(clientQPSLimit, clientBurst, eniTags); err != nil {
 			log.WithError(err).Fatal("Unable to start ENI allocator")
+		}
+
+		startSynchronizingCiliumNodes()
+	}
+
+	if ipamMode == option.IPAMAzure {
+		if err := startAzureAllocator(clientQPSLimit, clientBurst); err != nil {
+			log.WithError(err).Fatal("Unable to start Azure allocator")
 		}
 
 		startSynchronizingCiliumNodes()

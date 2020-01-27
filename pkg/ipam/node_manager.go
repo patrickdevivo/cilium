@@ -165,7 +165,7 @@ type AllocationImplementation interface {
 	Resync(ctx context.Context) time.Time
 }
 
-type metricsAPI interface {
+type MetricsAPI interface {
 	IncAllocationAttempt(status, subnetID string)
 	AddIPAllocation(subnetID string, allocated int64)
 	AddIPRelease(subnetID string, released int64)
@@ -188,14 +188,14 @@ type NodeManager struct {
 	nodes            nodeMap
 	instancesAPI     AllocationImplementation
 	k8sAPI           k8sImplementation
-	metricsAPI       metricsAPI
+	metricsAPI       MetricsAPI
 	resyncTrigger    *trigger.Trigger
 	parallelWorkers  int64
 	releaseExcessIPs bool
 }
 
 // NewNodeManager returns a new NodeManager
-func NewNodeManager(instancesAPI AllocationImplementation, k8sAPI k8sImplementation, metrics metricsAPI, parallelWorkers int64, releaseExcessIPs bool) (*NodeManager, error) {
+func NewNodeManager(instancesAPI AllocationImplementation, k8sAPI k8sImplementation, metrics MetricsAPI, parallelWorkers int64, releaseExcessIPs bool) (*NodeManager, error) {
 	if parallelWorkers < 1 {
 		parallelWorkers = 1
 	}
