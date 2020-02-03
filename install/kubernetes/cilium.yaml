@@ -19,8 +19,6 @@ data:
   #   setting it to "kvstore".
   identity-allocation-mode: crd
 
-  ipam: azure
-
   # If you want to run cilium in debug mode change this value to true
   debug: "false"
 
@@ -90,10 +88,14 @@ data:
   #   - disabled
   #   - vxlan (default)
   #   - geneve
-  tunnel: vxlan
+  tunnel: disabled
 
   # Name of the cluster. Only relevant when building a mesh of clusters.
   cluster-name: default
+  ipam: "eni"
+  enable-endpoint-routes: "true"
+  auto-create-cilium-node-resource: "true"
+  blacklist-conflicting-routes: "false"
 
   # DNS Polling periodically issues a DNS lookup for each `matchName` from
   # cilium-agent. The result is used to regenerate endpoint policy.
@@ -119,15 +121,14 @@ data:
   # wait-bpf-mount makes init container wait until bpf filesystem is mounted
   wait-bpf-mount: "false"
 
-  masquerade: "false"
+  masquerade: "true"
+  egress-masquerade-interfaces: eth0
 
   install-iptables-rules: "true"
   auto-direct-node-routes: "false"
-  kube-proxy-replacement:  "probe"
   enable-node-port: "false"
   enable-well-known-identities: "false"
   enable-remote-node-identity: "true"
-
 ---
 # Source: cilium/charts/agent/templates/serviceaccount.yaml
 apiVersion: v1
@@ -135,7 +136,6 @@ kind: ServiceAccount
 metadata:
   name: cilium
   namespace: kube-system
-
 ---
 # Source: cilium/charts/operator/templates/serviceaccount.yaml
 apiVersion: v1
@@ -143,7 +143,6 @@ kind: ServiceAccount
 metadata:
   name: cilium-operator
   namespace: kube-system
-
 ---
 # Source: cilium/charts/agent/templates/clusterrole.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -155,14 +154,6 @@ rules:
   - networking.k8s.io
   resources:
   - networkpolicies
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - discovery.k8s.io
-  resources:
-  - endpointslices
   verbs:
   - get
   - list
@@ -220,7 +211,6 @@ rules:
   - ciliumidentities/status
   verbs:
   - '*'
-
 ---
 # Source: cilium/charts/operator/templates/clusterrole.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -239,14 +229,6 @@ rules:
   - list
   - watch
   - delete
-- apiGroups:
-  - discovery.k8s.io
-  resources:
-  - endpointslices
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -278,7 +260,6 @@ rules:
   - ciliumidentities/status
   verbs:
   - '*'
-
 ---
 # Source: cilium/charts/agent/templates/clusterrolebinding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -293,7 +274,6 @@ subjects:
 - kind: ServiceAccount
   name: cilium
   namespace: kube-system
-
 ---
 # Source: cilium/charts/operator/templates/clusterrolebinding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -308,7 +288,6 @@ subjects:
 - kind: ServiceAccount
   name: cilium-operator
   namespace: kube-system
-
 ---
 # Source: cilium/charts/agent/templates/daemonset.yaml
 apiVersion: apps/v1
@@ -375,7 +354,7 @@ spec:
               key: custom-cni-conf
               name: cilium-config
               optional: true
-        image: "docker.io/tgraf/cilium:dev"
+        image: "docker.io/cilium/cilium:latest"
         imagePullPolicy: Always
         lifecycle:
           postStart:
@@ -442,6 +421,13 @@ spec:
           name: xtables-lock
       hostNetwork: true
       initContainers:
+      - name: wait-for-node-init
+        command: ['sh', '-c', 'until stat /tmp/cilium-bootstrap-time > /dev/null 2>&1; do echo "Waiting on node-init to run..."; sleep 1; done']
+        image: "docker.io/cilium/cilium:latest"
+        imagePullPolicy: Always
+        volumeMounts:
+        - mountPath: /tmp/cilium-bootstrap-time
+          name: cilium-bootstrap-file
       - command:
         - /init-container.sh
         env:
@@ -514,6 +500,10 @@ spec:
           path: /run/xtables.lock
           type: FileOrCreate
         name: xtables-lock
+      - hostPath:
+          path: /tmp/cilium-bootstrap-time
+          type: FileOrCreate
+        name: cilium-bootstrap-file
         # To read the clustermesh configuration
       - name: clustermesh-secrets
         secret:
@@ -528,7 +518,95 @@ spec:
     rollingUpdate:
       maxUnavailable: 2
     type: RollingUpdate
+---
+# Source: cilium/charts/nodeinit/templates/daemonset.yaml
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: cilium-node-init
+  namespace: kube-system
+  labels:
+    app: cilium-node-init
+spec:
+  selector:
+    matchLabels:
+      app: cilium-node-init
+  template:
+    metadata:
+      labels:
+        app: cilium-node-init
+    spec:
+      tolerations:
+      - operator: Exists
+      hostPID: true
+      hostNetwork: true
+      containers:
+        - name: node-init
+          image: gcr.io/google-containers/startup-script:v1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          env:
+          - name: CHECKPOINT_PATH
+            value: /tmp/node-init.cilium.io
+          # STARTUP_SCRIPT is the script run on node bootstrap. Node
+          # bootstrapping can be customized in this script.
+          - name: STARTUP_SCRIPT
+            value: |
+              #!/bin/bash
 
+              set -o errexit
+              set -o pipefail
+              set -o nounset
+
+              mount | grep "/sys/fs/bpf type bpf" || {
+                # Mount the filesystem until next reboot
+                echo "Mounting BPF filesystem..."
+                mount bpffs /sys/fs/bpf -t bpf
+
+                # Configure systemd to mount after next boot
+                echo "Installing BPF filesystem mount"
+                cat >/tmp/sys-fs-bpf.mount <<EOF
+                [Unit]
+                Description=Mount BPF filesystem (Cilium)
+                Documentation=http://docs.cilium.io/
+                DefaultDependencies=no
+                Before=local-fs.target umount.target
+                After=swap.target
+
+                [Mount]
+                What=bpffs
+                Where=/sys/fs/bpf
+                Type=bpf
+
+                [Install]
+                WantedBy=multi-user.target
+              EOF
+
+                if [ -d "/etc/systemd/system/" ]; then
+                  mv /tmp/sys-fs-bpf.mount /etc/systemd/system/
+                  echo "Installed sys-fs-bpf.mount to /etc/systemd/system/"
+                elif [ -d "/lib/systemd/system/" ]; then
+                  mv /tmp/sys-fs-bpf.mount /lib/systemd/system/
+                  echo "Installed sys-fs-bpf.mount to /lib/systemd/system/"
+                fi
+
+                # Ensure that filesystem gets mounted on next reboot
+                systemctl enable sys-fs-bpf.mount
+                systemctl start sys-fs-bpf.mount
+              }
+
+              echo "Link information:"
+              ip link
+
+              echo "Routing table:"
+              ip route
+
+              echo "Addressing:"
+              ip -4 a
+              ip -6 a
+              date > /tmp/cilium-bootstrap-time
+              echo "Node initialization complete"
 ---
 # Source: cilium/charts/operator/templates/deployment.yaml
 apiVersion: apps/v1
@@ -561,20 +639,9 @@ spec:
       - args:
         - --debug=$(CILIUM_DEBUG)
         - --identity-allocation-mode=$(CILIUM_IDENTITY_ALLOCATION_MODE)
-        - --synchronize-k8s-nodes=true
         command:
         - cilium-operator
         env:
-        - name: AZURE_SUBSCRIPTION_ID
-          value: fd182b79-36cb-4a4e-b567-e568d63f9f62
-        - name: AZURE_TENANT_ID
-          value: ef0bd011-1c76-4e1a-8595-99bc5f0adbb3
-        - name: AZURE_CLIENT_SECRET
-          value: 5d81eeda-3fce-44ec-9afa-9534ebd2e68e
-        - name: AZURE_CLIENT_ID
-          value: 77f31ed7-e6b0-4aea-a780-9519167f1d30
-        - name: AZURE_RESOURCE_GROUP
-          value: MC_group1_aks-test1_westus
         - name: CILIUM_K8S_NAMESPACE
           valueFrom:
             fieldRef:
@@ -651,7 +718,7 @@ spec:
               key: identity-allocation-mode
               name: cilium-config
               optional: true
-        image: "docker.io/tgraf/operator:dev"
+        image: "docker.io/cilium/operator:latest"
         imagePullPolicy: Always
         name: cilium-operator
         livenessProbe:
@@ -666,17 +733,3 @@ spec:
       restartPolicy: Always
       serviceAccount: cilium-operator
       serviceAccountName: cilium-operator
-
----
-# Source: cilium/charts/agent/templates/servicemonitor.yaml
-
----
-# Source: cilium/charts/agent/templates/svc.yaml
-
-
----
-# Source: cilium/charts/operator/templates/servicemonitor.yaml
-
----
-# Source: cilium/charts/operator/templates/svc.yaml
-
