@@ -191,6 +191,30 @@ var _ = Describe("K8sServicesTest", func() {
 			url := fmt.Sprintf("http://%s/", clusterIP)
 			testHTTPRequest(echoPodLabel, url)
 		}, 300)
+
+		ciliumCreateService := func(id int64, fe string, bes []string, svcType, trafficPolicy string) error {
+			switch strings.ToLower(svcType) {
+			case "nodeport":
+
+			}
+			return nil
+		}
+
+		ciliumDeleteService := func(id int64) error {
+			return nil
+		}
+
+		Context("IPv6 Connectivity", func() {
+			BeforeAll(func() {
+				ciliumCreateIPv6Service(1001, "[fd03::1]:90", nil, "ClusterIP", "Local")
+				// cilium service create
+			})
+
+			AfterAll(func() {
+				ciliumDeleteService(1001)
+				// cilium service delete
+			})
+		})
 	})
 
 	Context("Checks service across nodes", func() {
