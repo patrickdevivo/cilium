@@ -17,6 +17,7 @@ package endpoint
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -971,7 +972,9 @@ func (e *Endpoint) deletePolicyKey(keyToDelete policy.Key, incremental bool, had
 	// In other cases we only delete entries that exist, but even in that case it
 	// is better to not error out if somebody else has deleted the map entry in the
 	// meanwhile.
-	err, errno := e.policyMap.DeleteKeyWithErrno(policymapKey)
+	err := e.policyMap.DeleteKey(policymapKey)
+	var errno syscall.Errno
+	errors.As(err, &errno)
 	if err != nil && errno != syscall.ENOENT {
 		e.getLogger().WithError(err).WithField(logfields.BPFMapKey, policymapKey).Error("Failed to delete PolicyMap key")
 		return false

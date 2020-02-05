@@ -17,6 +17,7 @@
 package policymap
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -98,7 +99,9 @@ func (pm *PolicyMapTestSuite) TestPolicyMapDumpToSlice(c *C) {
 
 func (pm *PolicyMapTestSuite) TestDeleteNonexistentKey(c *C) {
 	key := newKey(27, 80, u8proto.ANY, trafficdirection.Ingress)
-	err, errno := testMap.Map.DeleteWithErrno(&key)
+	err := testMap.Map.Delete(&key)
 	c.Assert(err, Not(IsNil))
+	var errno syscall.Errno
+	c.Assert(errors.As(err, &errno), Equals, true)
 	c.Assert(errno, Equals, syscall.ENOENT)
 }
