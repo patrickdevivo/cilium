@@ -561,6 +561,17 @@ else
 	fi
 fi
 
+# Remove bpf_netdev.o from previously used devices
+for iface in $(ip -o -a l | awk '{print $2}' | cut -d: -f1 | grep -v cilium); do
+    [ "$iface" == "$NATIVE_DEV" ] && continue
+    if (tc filter show dev "$iface" ingress ; tc filter show dev "$iface" egress) | \
+		grep -q "bpf_netdev.o"; then
+
+        echo "Removing bpf_netdev.o from $iface"
+        tc qdisc del dev "$iface" clsact || true
+    fi
+done
+
 if [ "$HOSTLB" = "true" ]; then
 	if [ "$IP6_HOST" != "<nil>" ]; then
 		echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
