@@ -174,8 +174,8 @@ const (
 	KubectlPolicyNameLabel      = k8sConst.PolicyLabelName
 	KubectlPolicyNameSpaceLabel = k8sConst.PolicyLabelNamespace
 
-	CiliumStableHelmVersion = "1.6-dev"
-	CiliumLatestHelmVersion = "1.7.90"
+	CiliumStableHelmVersion = "1.6.6"
+	CiliumLatestHelmVersion = "1.6.90"
 	ciliumDeveloperImage    = "%s/cilium/cilium-dev:latest"
 
 	MonitorLogFileName = "monitor.log"
