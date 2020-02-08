@@ -309,22 +309,39 @@ IMPORTANT: Changes required before upgrading to 1.7.0
 * Cilium has bumped the minimal kubernetes version supported to v1.11.0.
 
 * The ``kubernetes.io/cluster-service`` label has been removed from the Cilium
-  `DaemonSet` selector. Existing users must remove this label from their
-  `DaemonSet` specification to safely upgrade. If action is not taken to make
-  the selector labels consistent with the upgraded YAMLs, then the new
-  `DaemonSet` YAML which is created during upgrade will fail to apply.
+  `DaemonSet` selector. Existing users must either choose to keep this label on
+  `DaemonSet` specification to safely upgrade or re-create the Cilium `DaemonSet`
+  without the deprecated label. It is advisable to run the with this flag when
+  doing an upgrade from ``v1.6.x`` to ``v1.7.x`` in the event of having to do a
+  downgrade. Removing this label should be done within same Cilium versions.
 
-  *Highly recommended:*
+  The helm option ``agent.keepDeprecatedLabels=true`` will keep the
+  ``kubernetes.io/cluster-service`` label in the new `DaemonSet`:
 
-  The below instructions will remove the ``kubernetes.io/cluster-service``
-  label from the existing `DaemonSet` in the cluster without making any other
-  changes.
+.. tabs::
+  .. group-tab:: kubectl
 
-  .. code:: bash
+    .. parsed-literal::
 
-     $ kubectl get ds -n kube-system cilium -o yaml > cilium-ds.yaml
-     $ sed -i '/kubernetes.io\/cluster-service: "true"/d' cilium-ds.yaml
-     $ kubectl apply -f cilium-ds.yaml --force
+      helm template cilium \
+      --namespace=kube-system \
+      ...
+      --set agent.keepDeprecatedLabels=true \
+      ...
+      > cilium.yaml
+      kubectl apply -f cilium.yaml
+
+  .. group-tab:: Helm
+
+    .. parsed-literal::
+
+      helm upgrade cilium --namespace=kube-system \
+      --set agent.keepDeprecatedLabels=true
+
+
+  Trying to upgrade Cilium without this option might result in an error similar
+  to: ``The DaemonSet "cilium" is invalid: spec.selector: Invalid value: ...: field is immutable``
+
 
 * If ``kvstore`` is setup with ``etcd`` **and** TLS is enabled, the field name
   ``ca-file`` will have its usage deprecated and will be removed in Cilium v1.8.0.
