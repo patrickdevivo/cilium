@@ -1,6 +1,8 @@
 # Include the cilium-agent DaemonSet
 agent:
   enabled: true
+  # Keep the deprecated selector labels when deploying Cilium DaemonSet
+  keepDeprecatedLabels: false
 
 # Include the cilium-config ConfigMap
 config:
